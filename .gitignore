@@ -1,0 +1,6 @@
+.private/
+*.private
+build/
+__pycache__
+.vscode
+
