@@ -156,30 +156,31 @@ class TraderOne(Trader):
             if wallets is not None:
                 self.refresh_wallets_cached_balances(block=True)
                 total_relative_balance: float = 0
-                relative_balances: list[tuple[Wallet, float]] = []
+                relative_balances: list[tuple[Wallet, float, float]] = []
                 for wallet in wallets:
                     rate = self.get_exchange().get_exchange_rate(wallet.get_ticker(), main_wallet.get_ticker())
                     relative_balance = rate*wallet.get_cached_balance()
                     total_relative_balance += relative_balance
-                    relative_balances.append((wallet, relative_balance))
-                highers: list[tuple[Wallet, float]] = []
-                lowers: list[tuple[Wallet, float]] = []
+                    relative_balances.append((wallet, relative_balance, rate))
+                highers: list[tuple[Wallet, float, float]] = []
+                lowers: list[tuple[Wallet, float, float]] = []
                 num_balances: int = len(relative_balances)+1
                 avg_balance: float = total_relative_balance / num_balances
-                for wallet, relative_balance in relative_balances:
+                for wallet, relative_balance, rate in relative_balances:
                     diff_balance: float = relative_balance - avg_balance
                     if diff_balance > 0:
-                        highers.append((wallet, diff_balance))
+                        highers.append((wallet, diff_balance, rate))
                     elif diff_balance < 0:
-                        lowers.append((wallet, diff_balance))
+                        lowers.append((wallet, diff_balance, rate))
                 for stage in [0, 1]:
-                    for wallet, diff_balance in highers if stage == 0 else lowers:
+                    for wallet, diff_balance, rate in highers if stage == 0 else lowers:
+                        trade_balance = diff_balance*rate
                         if stage == 0:
-                            if diff_balance > 0:
-                                self.get_exchange().trade(diff_balance, wallet, main_wallet)
+                            if trade_balance > 0:
+                                self.get_exchange().trade(trade_balance, wallet, main_wallet)
                         else:
-                            if diff_balance < 0:
-                                self.get_exchange().trade(abs(diff_balance), main_wallet, wallet)
+                            if trade_balance < 0:
+                                self.get_exchange().trade(abs(trade_balance), main_wallet, wallet)
 
     def tick(self):
         self.do_trade_cycle()
