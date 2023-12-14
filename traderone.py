@@ -50,7 +50,7 @@ class Wallet():
         else:
             Thread(target=self.refresh_cached_balance, kwargs={"block": True}).start()
 
-    def send_to(self, rec_addr: str, meta: dict | None) -> dict | None:
+    def send_to(self, rec_addr: str, amount: float | None, meta: dict | None) -> dict | None:
         pass
 
 
@@ -186,22 +186,73 @@ class TraderOne(Trader):
         self.do_trade_cycle()
 
 
-def main(args: list[str]) -> int:
-    return 0
+
+class Tests():
+    class Test1():
+        @staticmethod
+        def test1_main(args: list[str]) -> int:
+            exchange: Tests.Test1.Test1Exchange = Tests.Test1.Test1Exchange()
+            trader: TraderOne = TraderOne(exchange, [Tests.Test1.Test1Wallet(ticker, ticker, ticker) for ticker in exchange.get_supported_tickers()], min_cycle_delay=10)
+            for n in range(19):
+                print("Starting Cycle no.", n)
+                exchange._shuffle_tickers()
+                trader.tick()
+                print([[wallet.get_ticker(), wallet.get_addr(), wallet.get_auth(), wallet.get_live_balance(), wallet.get_cached_balance(), wallet.get_is_refreshing_cached_balance()] for wallet in trader.get_wallets() if wallet is not None])
+                print("Finished Cycle no.", n)
+                sleep(0.1)
+            return 0
+
+        class Test1Wallet(Wallet):
+            def __init__(self, ticker: str, addr: str, auth: str, start_balance: float = 1):
+                super().__init__(ticker, addr, auth)
+                self.balance: float = start_balance
+
+            def get_live_balance(self) -> float | None:
+                return self.balance
+
+            def send_to(self, rec_addr: str, amount: float | None, meta: dict | None) -> dict | None:
+                if amount is not None:
+                    self.balance -= amount
+                return super().send_to(rec_addr, amount, meta)
+
+        class Test1Exchange(Exchange):
+            def __init__(self, name: str = "test", num_tickers: int = 6, max_shuffle: int = 3):
+                super().__init__(name)
+                self.tickers: dict[str, float] = {}
+                for n in range(num_tickers):
+                    self.tickers[str(n)] = n
+                self.max_shuffle: int = max_shuffle
+
+            def get_supported_tickers(self) -> list[str]:
+                return list(self.tickers.keys())
+
+            def get_exchange_rate(self, from_ticker: str, to_ticker: str) -> float:
+                return self.tickers[to_ticker]/self.tickers[from_ticker]
+
+            def trade(self, amount: float, from_wallet: Wallet, to_wallet: Wallet) -> dict | None:
+                from_wallet.send_to("", amount, None)
+                to_wallet.balance += amount*self.get_exchange_rate(from_wallet.get_ticker(), to_wallet.get_ticker())
+                return super().trade(amount, from_wallet, to_wallet)
+
+            def _shuffle_tickers(self):
+                for ticker in self.tickers.keys():
+                    n = randint(-(self.max_shuffle), self.max_shuffle)
+                    if n != 0:
+                        self.tickers[ticker] += n
+                    if self.tickers[ticker] <= 0:
+                        self.tickers[ticker] = 1
+                    print(n, self.tickers[ticker], ticker)
+
 
 def test_main(args: list[str]) -> int:
-    trader: TraderOne = TraderOne(Exchange("dummy"), [Wallet("dummy1", "dummy1", "dummy1"), Wallet("dummy2", "dummy2", "dummy2")], min_cycle_delay=10)
-    for n in range(19):
-        print("Starting Cycle no.", n)
-        trader.do_trade_cycle()
-        print([[wallet.get_ticker(), wallet.get_addr(), wallet.get_auth(), wallet.get_live_balance(), wallet.get_cached_balance(), wallet.get_is_refreshing_cached_balance()] for wallet in trader.get_wallets() if wallet is not None])
-        print("Finished Cycle no.", n)
-        sleep(5)
+    return Tests.Test1.test1_main(args)
+
+
+def main(args: list[str]) -> int:
     return 0
 
 
 if __name__ == "__main__":
     from sys import argv
-    exit(test_main(argv))
     #exit(main(argv))
-
+    exit(test_main(argv))
