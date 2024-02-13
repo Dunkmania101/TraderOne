@@ -10,6 +10,10 @@ global logger
 logger = getLogger("traderone")
 
 
+class Transaction():
+    TAG_COMPLETED = "completed"
+
+
 class Wallet():
     def __init__(self, ticker: str, addr: str, auth: str):
         self.ticker: str = ticker
@@ -51,7 +55,7 @@ class Wallet():
             Thread(target=self.refresh_cached_balance, kwargs={"block": True}).start()
 
     def send_to(self, rec_addr: str, amount: float | None, meta: dict | None) -> dict | None:
-        pass
+        return {Transaction.TAG_COMPLETED: True}
 
 
 class Exchange():
@@ -120,8 +124,9 @@ class Trader():
 
 
 class TraderOne(Trader):
-    def __init__(self, exchange: Exchange, wallets: list[Wallet], min_cycle_delay: float = 30*60, max_random_cycle_delay_add: float = 0, main_wallet_index: int = 0):
+    def __init__(self, exchange: Exchange, wallets: list[Wallet], min_cycle_delay: float = 30*60, max_random_cycle_delay_add: float = 0, min_proportional_diff: float = 0.1, main_wallet_index: int = 0):
         super().__init__(exchange, wallets, min_cycle_delay, max_random_cycle_delay_add)
+        self.min_proportional_diff: float = min_proportional_diff
         self.main_wallet_index: int = main_wallet_index
 
     def _check_enough_wallets_(self) -> bool:
@@ -131,6 +136,9 @@ class TraderOne(Trader):
         else:
             logger.warning(f"Only {w} wallets are set! (At least two(2) are needed)")
             return False
+
+    def get_min_proportional_diff(self) -> float:
+        return self.min_proportional_diff
 
     def get_main_wallet_index(self) -> int:
         return self.main_wallet_index
@@ -175,12 +183,14 @@ class TraderOne(Trader):
                 for stage in [0, 1]:
                     for wallet, diff_balance, rate in highers if stage == 0 else lowers:
                         trade_balance = diff_balance*rate
-                        if stage == 0:
-                            if trade_balance > 0:
-                                self.get_exchange().trade(trade_balance, wallet, main_wallet)
-                        else:
-                            if trade_balance < 0:
-                                self.get_exchange().trade(abs(trade_balance), main_wallet, wallet)
+                        if wallet.get_cached_balance() > 0 and wallet.get_cached_balance() > abs(trade_balance):
+                            if abs(trade_balance) / wallet.get_cached_balance() >= self.get_min_proportional_diff():
+                                if stage == 0:
+                                    if trade_balance > 0:
+                                        self.get_exchange().trade(trade_balance, from_wallet=wallet, to_wallet=main_wallet)
+                                    else:
+                                        if trade_balance < 0:
+                                            self.get_exchange().trade(abs(trade_balance), from_wallet=main_wallet, to_wallet=wallet)
 
     def tick(self):
         self.do_trade_cycle()
@@ -190,16 +200,20 @@ class TraderOne(Trader):
 class Tests():
     class Test1():
         @staticmethod
-        def test1_main(args: list[str]) -> int:
+        def test1_main(args: list[str], cycles: int = 50) -> int:
             exchange: Tests.Test1.Test1Exchange = Tests.Test1.Test1Exchange()
             trader: TraderOne = TraderOne(exchange, [Tests.Test1.Test1Wallet(ticker, ticker, ticker) for ticker in exchange.get_supported_tickers()], min_cycle_delay=10)
-            for n in range(19):
+            def printstat():
+                print([f"[Ticker: {wallet.get_ticker()}, Address: {wallet.get_addr()}, Auth: {wallet.get_auth()}, LiveBalance: {wallet.get_live_balance()}, CachedBalance: {wallet.get_cached_balance()}, IsRefreshingCachedBalance: {wallet.get_is_refreshing_cached_balance()}]" for wallet in trader.get_wallets() if wallet is not None])
+                print(f"Total portfolio value relative to start: {sum([wallet.get_live_balance()*exchange.tickers[trader.get_main_wallet().get_ticker()] for wallet in trader.get_wallets() if wallet is not None])}")
+            printstat()
+            for n in range(cycles):
                 print("Starting Cycle no.", n)
                 exchange._shuffle_tickers()
                 trader.tick()
-                print([[wallet.get_ticker(), wallet.get_addr(), wallet.get_auth(), wallet.get_live_balance(), wallet.get_cached_balance(), wallet.get_is_refreshing_cached_balance()] for wallet in trader.get_wallets() if wallet is not None])
+                printstat()
                 print("Finished Cycle no.", n)
-                sleep(0.1)
+                #sleep(0.1)
             return 0
 
         class Test1Wallet(Wallet):
@@ -212,7 +226,11 @@ class Tests():
 
             def send_to(self, rec_addr: str, amount: float | None, meta: dict | None) -> dict | None:
                 if amount is not None:
-                    self.balance -= amount
+                    newbalance = self.balance - amount
+                    if newbalance < 0:
+                        return {Transaction.TAG_COMPLETED: False}
+                    else:
+                        self.balance = newbalance
                 return super().send_to(rec_addr, amount, meta)
 
         class Test1Exchange(Exchange):
@@ -230,8 +248,9 @@ class Tests():
                 return self.tickers[to_ticker]/self.tickers[from_ticker]
 
             def trade(self, amount: float, from_wallet: Wallet, to_wallet: Wallet) -> dict | None:
-                from_wallet.send_to("", amount, None)
-                to_wallet.balance += amount*self.get_exchange_rate(from_wallet.get_ticker(), to_wallet.get_ticker())
+                transaction = from_wallet.send_to("", amount, None)
+                if transaction is not None and transaction.get(Transaction.TAG_COMPLETED, False):
+                    to_wallet.balance += amount*self.get_exchange_rate(from_wallet.get_ticker(), to_wallet.get_ticker())
                 return super().trade(amount, from_wallet, to_wallet)
 
             def _shuffle_tickers(self):
@@ -241,7 +260,7 @@ class Tests():
                         self.tickers[ticker] += n
                     if self.tickers[ticker] <= 0:
                         self.tickers[ticker] = 1
-                    print(n, self.tickers[ticker], ticker)
+                    print(f"Shuffled ticker: {ticker} by {n} to {self.tickers[ticker]}")
 
 
 def test_main(args: list[str]) -> int:
@@ -256,3 +275,4 @@ if __name__ == "__main__":
     from sys import argv
     #exit(main(argv))
     exit(test_main(argv))
+
