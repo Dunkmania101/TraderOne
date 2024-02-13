@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from logging import getLogger
+from logging import getLogger, basicConfig
 from threading import Thread
 from time import sleep, time
 from random import randint
@@ -8,6 +8,7 @@ from random import randint
 
 global logger
 logger = getLogger("traderone")
+logger.setLevel("INFO")
 
 
 class Transaction():
@@ -204,15 +205,15 @@ class Tests():
             exchange: Tests.Test1.Test1Exchange = Tests.Test1.Test1Exchange()
             trader: TraderOne = TraderOne(exchange, [Tests.Test1.Test1Wallet(ticker, ticker, ticker) for ticker in exchange.get_supported_tickers()], min_cycle_delay=10)
             def printstat():
-                print([f"[Ticker: {wallet.get_ticker()}, Address: {wallet.get_addr()}, Auth: {wallet.get_auth()}, LiveBalance: {wallet.get_live_balance()}, CachedBalance: {wallet.get_cached_balance()}, IsRefreshingCachedBalance: {wallet.get_is_refreshing_cached_balance()}]" for wallet in trader.get_wallets() if wallet is not None])
-                print(f"Total portfolio value relative to start: {sum([wallet.get_live_balance()*exchange.tickers[trader.get_main_wallet().get_ticker()] for wallet in trader.get_wallets() if wallet is not None])}")
+                logger.info([f"[Ticker: {wallet.get_ticker()}, Address: {wallet.get_addr()}, Auth: {wallet.get_auth()}, LiveBalance: {wallet.get_live_balance()}, CachedBalance: {wallet.get_cached_balance()}, IsRefreshingCachedBalance: {wallet.get_is_refreshing_cached_balance()}]" for wallet in trader.get_wallets() if wallet is not None])
+                logger.info(f"Total portfolio value relative to start: {sum([wallet.get_live_balance()*exchange.tickers[trader.get_main_wallet().get_ticker()] for wallet in trader.get_wallets() if wallet is not None])}")
             printstat()
             for n in range(cycles):
-                print("Starting Cycle no.", n)
+                logger.info(f"Starting Cycle no. {n}")
                 exchange._shuffle_tickers()
                 trader.tick()
                 printstat()
-                print("Finished Cycle no.", n)
+                logger.info(f"Finished Cycle no. {n}")
                 #sleep(0.1)
             return 0
 
@@ -260,11 +261,12 @@ class Tests():
                         self.tickers[ticker] += n
                     if self.tickers[ticker] <= 0:
                         self.tickers[ticker] = 1
-                    print(f"Shuffled ticker: {ticker} by {n} to {self.tickers[ticker]}")
+                    logger.info(f"Shuffled ticker: {ticker} by {n} to {self.tickers[ticker]}")
 
 
 def test_main(args: list[str]) -> int:
-    return Tests.Test1.test1_main(args)
+    basicConfig()
+    return Tests.Test1.test1_main(args)#, 1500)
 
 
 def main(args: list[str]) -> int:
