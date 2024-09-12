@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from argparse import ArgumentParser
 from logging import getLogger, basicConfig
 from threading import Thread
 from time import sleep, time
@@ -9,6 +10,21 @@ from random import randint
 global logger
 logger = getLogger("traderone")
 logger.setLevel("INFO")
+
+
+def get_div_str(end: bool = False, thin: bool = False) -> str:
+    begincap = "++"
+    endcap = "--"
+    body = "__________" if thin else "=========="
+    cap, title = (endcap, "END") if end else (begincap, "BEGIN")
+    return cap+body+title+body+cap
+
+
+class ConfigKeys():
+    TRADER = "trader"
+    EXCHANGE = "exchange"
+    TEST = "test"
+    CYCLES = "cycles"
 
 
 class Transaction():
@@ -109,10 +125,10 @@ class Trader():
     def is_runnable(self) -> bool:
         return True
 
-    def tick(self):
+    def do_trade_cycle(self):
         pass
 
-    def do_tick(self):
+    def tick(self):
         delay: float = self.get_min_cycle_delay()
         rand_delay: float = self.get_max_random_cycle_delay_add()
         if rand_delay != 0:
@@ -121,7 +137,7 @@ class Trader():
         current_time: float = time()
         if current_time - self.get_last_tick_time() >= delay:
             self.last_tick_time = current_time
-            self.tick()
+            self.do_trade_cycle()
 
 
 class TraderOne(Trader):
@@ -193,28 +209,42 @@ class TraderOne(Trader):
                                         if trade_balance < 0:
                                             self.get_exchange().trade(abs(trade_balance), from_wallet=main_wallet, to_wallet=wallet)
 
-    def tick(self):
-        self.do_trade_cycle()
-
 
 
 class Tests():
     class Test1():
         @staticmethod
-        def test1_main(args: list[str], cycles: int = 50) -> int:
+        def test1_main(args: dict, cycles: int = 50) -> int:
             exchange: Tests.Test1.Test1Exchange = Tests.Test1.Test1Exchange()
             trader: TraderOne = TraderOne(exchange, [Tests.Test1.Test1Wallet(ticker, ticker, ticker) for ticker in exchange.get_supported_tickers()], min_cycle_delay=10)
             def printstat():
                 logger.info([f"[Ticker: {wallet.get_ticker()}, Address: {wallet.get_addr()}, Auth: {wallet.get_auth()}, LiveBalance: {wallet.get_live_balance()}, CachedBalance: {wallet.get_cached_balance()}, IsRefreshingCachedBalance: {wallet.get_is_refreshing_cached_balance()}]" for wallet in trader.get_wallets() if wallet is not None])
-                logger.info(f"Total portfolio value relative to start: {sum([wallet.get_live_balance()*exchange.tickers[trader.get_main_wallet().get_ticker()] for wallet in trader.get_wallets() if wallet is not None])}")
+                logger.info(f"Total portfolio value change relative to start: {sum([wallet.get_live_balance()*exchange.tickers[trader.get_main_wallet().get_ticker()] for wallet in trader.get_wallets() if wallet is not None])}")
             printstat()
-            for n in range(cycles):
+            def run(n: int):
+                logger.info(get_div_str(False, False))
                 logger.info(f"Starting Cycle no. {n}")
-                exchange._shuffle_tickers()
-                trader.tick()
+                logger.info(get_div_str(False, True))
+                exchange.shuffle_tickers()
+                logger.info(get_div_str(True, True))
+                #trader.tick()
+                trader.do_trade_cycle()
                 printstat()
                 logger.info(f"Finished Cycle no. {n}")
+                logger.info(get_div_str(True, False))
                 #sleep(0.1)
+            if cycles > -1:
+                for n in range(cycles):
+                    run(n)
+            else:
+                n = 0
+                while True:
+                    try:
+                        run(n)
+                        n += 1
+                    except KeyboardInterrupt:
+                        print("Keyboard interrupt received, exiting...")
+                        break
             return 0
 
         class Test1Wallet(Wallet):
@@ -254,7 +284,7 @@ class Tests():
                     to_wallet.balance += amount*self.get_exchange_rate(from_wallet.get_ticker(), to_wallet.get_ticker())
                 return super().trade(amount, from_wallet, to_wallet)
 
-            def _shuffle_tickers(self):
+            def shuffle_tickers(self):
                 for ticker in self.tickers.keys():
                     n = randint(-(self.max_shuffle), self.max_shuffle)
                     if n != 0:
@@ -264,17 +294,28 @@ class Tests():
                     logger.info(f"Shuffled ticker: {ticker} by {n} to {self.tickers[ticker]}")
 
 
-def test_main(args: list[str]) -> int:
-    basicConfig()
-    return Tests.Test1.test1_main(args)#, 1500)
+def test_main(args: dict) -> int:
+    return Tests.Test1.test1_main(args, cycles=args.get(ConfigKeys.CYCLES, -1))
 
+def run_main(args: dict) -> int:
+    return 0
 
 def main(args: list[str]) -> int:
-    return 0
+    parser = ArgumentParser()
+
+    parser.add_argument("-t", "--"+ConfigKeys.TRADER, help="Name of trader to use")
+    parser.add_argument("-e", "--"+ConfigKeys.EXCHANGE, help="Name of exchane to use")
+    parser.add_argument("-T", "--"+ConfigKeys.TEST, help="Test mode", action="store_true")
+    parser.add_argument("-c", "--"+ConfigKeys.CYCLES, help="Number of cycles to complete (unspecified or -1 for unlimited)", type=int, default=-1)
+
+    pargs = parser.parse_args(args=args[1:])
+    _args = {ConfigKeys.TRADER: pargs.trader, ConfigKeys.EXCHANGE: pargs.exchange, ConfigKeys.CYCLES: pargs.cycles}
+
+    basicConfig()
+    return test_main(_args) if pargs.test else run_main(_args)
 
 
 if __name__ == "__main__":
     from sys import argv
-    #exit(main(argv))
-    exit(test_main(argv))
+    exit(main(argv))
 
