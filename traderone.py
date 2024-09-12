@@ -21,6 +21,8 @@ def get_div_str(end: bool = False, thin: bool = False) -> str:
 
 
 class ConfigKeys():
+    ADDRESS = "address"
+    AUTH = "auth"
     TRADER = "trader"
     EXCHANGE = "exchange"
     TEST = "test"
@@ -32,10 +34,10 @@ class Transaction():
 
 
 class Wallet():
-    def __init__(self, ticker: str, addr: str, auth: str):
+    def __init__(self, ticker: str, addr: str, auth: str | None):
         self.ticker: str = ticker
         self.addr: str = addr
-        self.auth: str = auth
+        self.auth: str | None = auth
         self.cached_balance: float = 0
         self.is_refreshing_cached_balance: bool = False
 
@@ -49,7 +51,7 @@ class Wallet():
     def get_addr(self) -> str:
         return self.addr
 
-    def get_auth(self) -> str:
+    def get_auth(self) -> str | None:
         return self.auth
 
     def get_cached_balance(self) -> float:
@@ -132,12 +134,47 @@ class Trader():
         delay: float = self.get_min_cycle_delay()
         rand_delay: float = self.get_max_random_cycle_delay_add()
         if rand_delay != 0:
-            scale_factor = 100
-            delay += randint(0, int(rand_delay*scale_factor))/scale_factor
+            float_scale = 100
+            delay += randint(0, int(rand_delay*float_scale))/float_scale
         current_time: float = time()
         if current_time - self.get_last_tick_time() >= delay:
             self.last_tick_time = current_time
             self.do_trade_cycle()
+
+
+class TraderRunner():
+    def __init__(self, trader: Trader):
+        self.trader: Trader = trader
+
+    def main_loop(self, cycles: int | None = -1, pause: float = 0.1) -> int:
+        def printstat():
+            logger.info([f"[Ticker: {wallet.get_ticker()}, Address: {wallet.get_addr()}, Auth: {wallet.get_auth()}, LiveBalance: {wallet.get_live_balance()}, CachedBalance: {wallet.get_cached_balance()}, IsRefreshingCachedBalance: {wallet.get_is_refreshing_cached_balance()}]" for wallet in self.trader.get_wallets() if wallet is not None])
+            #logger.info(f"Total portfolio value change relative to start: {sum([wallet.get_live_balance()*exchange.tickers[trader.get_main_wallet().get_ticker()] for wallet in trader.get_wallets() if wallet is not None])}")
+        printstat()
+        def run(n: int):
+            logger.info(get_div_str(False, False))
+            logger.info(f"Starting Cycle no. {n}")
+            logger.info(get_div_str(False, True))
+            self.trader.do_trade_cycle()
+            printstat()
+            logger.info(f"Finished Cycle no. {n}")
+            logger.info(get_div_str(True, False))
+            sleep(pause)
+        if cycles is not None and cycles > -1:
+            for n in range(cycles):
+                run(n)
+        else:
+            n = 0
+            while True:
+                try:
+                    run(n)
+                    n += 1
+                except KeyboardInterrupt:
+                    print("Keyboard interrupt received, exiting...")
+                    break
+        return 0
+
+
 
 
 class TraderOne(Trader):
@@ -151,7 +188,7 @@ class TraderOne(Trader):
         if w >= 2:
             return True
         else:
-            logger.warning(f"Only {w} wallets are set! (At least two(2) are needed)")
+            logger.warning(f"Only {w} wallet{'' if w == 1 else 's'} {'is' if w == 1 else 'are'} set! (At least two(2) are needed)")
             return False
 
     def get_min_proportional_diff(self) -> float:
@@ -298,21 +335,41 @@ def test_main(args: dict) -> int:
     return Tests.Test1.test1_main(args, cycles=args.get(ConfigKeys.CYCLES, -1))
 
 def run_main(args: dict) -> int:
-    return 0
+    logger.error("This is the base script; no live exchanges/wallets are defined here! You must run a script that extends this one to perform live trading. traderone-uniswap.py is provided as an example. Exiting with error code 1...")
+    return 1
 
-def main(args: list[str]) -> int:
-    parser = ArgumentParser()
 
-    parser.add_argument("-t", "--"+ConfigKeys.TRADER, help="Name of trader to use")
-    parser.add_argument("-e", "--"+ConfigKeys.EXCHANGE, help="Name of exchane to use")
+
+def common_init() -> None:
+    basicConfig()
+
+
+def prep_parser(parser: ArgumentParser | None = None) -> ArgumentParser:
+    if parser is None:
+        parser = ArgumentParser()
+
+    parser.add_argument("-w", "--"+ConfigKeys.ADDRESS, help="Wallet address to use")
+    parser.add_argument("-a", "--"+ConfigKeys.AUTH, help="Wallet authentication token to use (most likely a private key)")
+    parser.add_argument("-e", "--"+ConfigKeys.EXCHANGE, help="Name of exchane to use (CURRENTLY UNUSED)")
+    parser.add_argument("-t", "--"+ConfigKeys.TRADER, help="Name of trader to use (CURRENTLY UNUSED)")
     parser.add_argument("-T", "--"+ConfigKeys.TEST, help="Test mode", action="store_true")
     parser.add_argument("-c", "--"+ConfigKeys.CYCLES, help="Number of cycles to complete (unspecified or -1 for unlimited)", type=int, default=-1)
 
-    pargs = parser.parse_args(args=args[1:])
-    _args = {ConfigKeys.TRADER: pargs.trader, ConfigKeys.EXCHANGE: pargs.exchange, ConfigKeys.CYCLES: pargs.cycles}
+    return parser
 
-    basicConfig()
-    return test_main(_args) if pargs.test else run_main(_args)
+
+def parse_args(args: list[str], parser: ArgumentParser | None = None) -> dict:
+    if parser is None:
+        parser = prep_parser()
+
+    pargs = vars(parser.parse_args(args=args[1:]))
+
+    return pargs
+
+def main(args: list[str]) -> int:
+    common_init()
+    pargs = parse_args(args)
+    return test_main(pargs) if pargs[ConfigKeys.TEST] else run_main(pargs)
 
 
 if __name__ == "__main__":
