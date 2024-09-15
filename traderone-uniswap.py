@@ -38,6 +38,10 @@ class UniswapExchange(t1.Exchange):
         return self.uniswap.get_price_output(self.tickers[from_ticker][0], self.tickers[to_ticker][0], self.tickers[from_ticker][1])/self.tickers[to_ticker][1]
 
     @override
+    def get_fee(self, amount: float, from_wallet: t1.Wallet, to_wallet: t1.Wallet) -> float:
+        return self.uniswap.get_fee_taker()
+
+    @override
     def trade(self, amount: float, from_wallet: t1.Wallet, to_wallet: t1.Wallet) -> dict | None:
         out = self.uniswap.make_trade(self.tickers[from_wallet.get_ticker()][0], self.tickers[to_wallet.get_ticker()][0], int(amount*self.tickers[from_wallet.get_ticker()][1]))
         return {"hexbytes": out}

@@ -5,6 +5,7 @@ from logging import getLogger, basicConfig
 from threading import Thread
 from time import sleep, time
 from random import randint
+from typing import override
 
 
 global logger
@@ -88,6 +89,9 @@ class Exchange():
         return []
 
     def get_exchange_rate(self, from_ticker: str, to_ticker: str) -> float:
+        return 0
+
+    def get_fee(self, amount: float, from_wallet: Wallet, to_wallet: Wallet) -> float:
         return 0
 
     def trade(self, amount: float, from_wallet: Wallet, to_wallet: Wallet) -> dict | None:
@@ -211,6 +215,7 @@ class TraderOne(Trader):
         else:
             return None
 
+    @override
     def do_trade_cycle(self) -> None:
         main_wallet = self.get_main_wallet()
         if main_wallet is not None:
@@ -234,11 +239,11 @@ class TraderOne(Trader):
                         highers.append((wallet, diff_balance, rate))
                     elif diff_balance < 0:
                         lowers.append((wallet, diff_balance, rate))
-                for stage in [0, 1]:
+                for stage in (0, 1):
                     for wallet, diff_balance, rate in highers if stage == 0 else lowers:
                         trade_balance = diff_balance*rate
                         if wallet.get_cached_balance() > 0 and wallet.get_cached_balance() > abs(trade_balance):
-                            if abs(trade_balance) / wallet.get_cached_balance() >= self.get_min_proportional_diff():
+                            if (abs(trade_balance)+self.get_exchange().get_fee(trade_balance, main_wallet if stage else wallet, wallet if stage else main_wallet)) / wallet.get_cached_balance() >= self.get_min_proportional_diff():
                                 if stage == 0:
                                     if trade_balance > 0:
                                         self.get_exchange().trade(trade_balance, from_wallet=wallet, to_wallet=main_wallet)
@@ -289,9 +294,11 @@ class Tests():
                 super().__init__(ticker, addr, auth)
                 self.balance: float = start_balance
 
+            @override
             def get_live_balance(self) -> float | None:
                 return self.balance
 
+            @override
             def send_to(self, rec_addr: str, amount: float | None, meta: dict | None) -> dict | None:
                 if amount is not None:
                     newbalance = self.balance - amount
@@ -309,17 +316,24 @@ class Tests():
                     self.tickers[str(n)] = n
                 self.max_shuffle: int = max_shuffle
 
+            @override
             def get_supported_tickers(self) -> list[str]:
                 return list(self.tickers.keys())
 
+            @override
             def get_exchange_rate(self, from_ticker: str, to_ticker: str) -> float:
                 return self.tickers[to_ticker]/self.tickers[from_ticker]
 
+            @override
             def trade(self, amount: float, from_wallet: Wallet, to_wallet: Wallet) -> dict | None:
                 transaction = from_wallet.send_to("", amount, None)
                 if transaction is not None and transaction.get(Transaction.TAG_COMPLETED, False):
                     to_wallet.balance += amount*self.get_exchange_rate(from_wallet.get_ticker(), to_wallet.get_ticker())
                 return super().trade(amount, from_wallet, to_wallet)
+
+            @override
+            def get_fee(self, amount: float, from_wallet: Wallet, to_wallet: Wallet) -> float:
+                return self.get_exchange_rate(from_wallet.get_ticker(), to_wallet.get_ticker())*(randint(1, 10)/100)
 
             def shuffle_tickers(self):
                 for ticker in self.tickers.keys():
