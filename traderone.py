@@ -8,9 +8,28 @@ from random import randint
 from typing import override
 
 
+
+class LoggerWrapper: # This is here just in case regular print statements are needed
+    def __init__(self, name: str = "traderone"):
+        self.logger = getLogger(name)
+        self.logger.setLevel("INFO")
+
+    def info(self, msg):
+        self.logger.info(msg)
+        #print(msg)
+
+    def warning(self, msg):
+        self.logger.warning(msg)
+        #print(msg)
+
+    def error(self, msg):
+        self.logger.error(msg)
+        #print(msg)
+
+
 global logger
-logger = getLogger("traderone")
-logger.setLevel("INFO")
+logger = LoggerWrapper()
+
 
 
 def get_div_str(end: bool = False, thin: bool = False) -> str:
@@ -182,10 +201,12 @@ class TraderRunner():
 
 
 class TraderOne(Trader):
-    def __init__(self, exchange: Exchange, wallets: list[Wallet], min_cycle_delay: float = 30*60, max_random_cycle_delay_add: float = 0, min_proportional_diff: float = 0.1, main_wallet_index: int = 0):
+    def __init__(self, exchange: Exchange, wallets: list[Wallet], min_cycle_delay: float = 30*60, max_random_cycle_delay_add: float = 0, min_proportional_diff: float = 0.1, max_downs: int | None = 100, main_wallet_index: int = 0):
         super().__init__(exchange, wallets, min_cycle_delay, max_random_cycle_delay_add)
         self.min_proportional_diff: float = min_proportional_diff
         self.main_wallet_index: int = main_wallet_index
+        self.down_tracker: list[tuple[float | None, int]] = [(None, 0) for _ in self.get_wallets()]
+        self.max_downs: int | None = max_downs
 
     def _check_enough_wallets_(self) -> bool:
         w = len(self.get_wallets())
@@ -224,8 +245,13 @@ class TraderOne(Trader):
                 self.refresh_wallets_cached_balances(block=True)
                 total_relative_balance: float = 0
                 relative_balances: list[tuple[Wallet, float, float]] = []
-                for wallet in wallets:
+                for i, wallet in enumerate(wallets):
                     rate = self.get_exchange().get_exchange_rate(wallet.get_ticker(), main_wallet.get_ticker())
+                    if self.down_tracker[i][0] is not None:
+                        since_up = self.down_tracker[i][1] + 1 if self.down_tracker[i][0] < rate else 0
+                    else:
+                        since_up = 0
+                    self.down_tracker[i] = (rate, since_up)
                     relative_balance = rate*wallet.get_cached_balance()
                     total_relative_balance += relative_balance
                     relative_balances.append((wallet, relative_balance, rate))
@@ -233,7 +259,11 @@ class TraderOne(Trader):
                 lowers: list[tuple[Wallet, float, float]] = []
                 num_balances: int = len(relative_balances)+1
                 avg_balance: float = total_relative_balance / num_balances
-                for wallet, relative_balance, rate in relative_balances:
+                for i, bal in enumerate(relative_balances):
+                    wallet, relative_balance, rate = bal
+                    if self.max_downs is not None and self.down_tracker[i][1] > self.max_downs:
+                        logger.warning(f"Ticker {wallet.get_ticker()} has been down for {self.down_tracker[i][1]} trade-cycles, skipping...")
+                        pass
                     diff_balance: float = relative_balance - avg_balance
                     if diff_balance > 0:
                         highers.append((wallet, diff_balance, rate))
@@ -338,6 +368,7 @@ class Tests():
             def shuffle_tickers(self):
                 for ticker in self.tickers.keys():
                     n = randint(-(self.max_shuffle), self.max_shuffle)
+                    #n = -0.001 # To validate that down-stopping works
                     if n != 0:
                         self.tickers[ticker] += n
                     if self.tickers[ticker] <= 0:
@@ -355,7 +386,9 @@ def run_main(args: dict) -> int:
 
 
 def common_init() -> None:
-    basicConfig()
+    from sys import stdout
+    basicConfig(stream=stdout)
+    #basicConfig()
 
 
 def prep_parser(parser: ArgumentParser | None = None) -> ArgumentParser:
