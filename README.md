@@ -11,7 +11,7 @@ Run:
 
 ```
 git clone https://github.com/Dunkmania101/TraderOne
-cd TraderOne`
+cd TraderOne
 ```
 
 
