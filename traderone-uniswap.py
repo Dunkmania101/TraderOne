@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
 from argparse import ArgumentParser
-from typing import override
+from typing import final, override
 import traderone as t1
 from uniswap import Uniswap
 
 
 
+@final
 class ConfigKeys():
     PROVIDER = "provider"
 

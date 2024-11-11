@@ -5,7 +5,7 @@ from logging import getLogger, basicConfig
 from threading import Thread
 from time import sleep, time
 from random import randint
-from typing import override
+from typing import final, override
 
 
 
@@ -40,6 +40,7 @@ def get_div_str(end: bool = False, thin: bool = False) -> str:
     return cap+body+title+body+cap
 
 
+@final
 class ConfigKeys():
     ADDRESS = "address"
     AUTH = "auth"
@@ -49,6 +50,7 @@ class ConfigKeys():
     CYCLES = "cycles"
 
 
+@final
 class Transaction():
     TAG_COMPLETED = "completed"
 
