@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from argparse import ArgumentParser
-from typing import final, override
+from typing import final#, override
 import traderone as t1
 from uniswap import Uniswap
 
@@ -30,19 +30,19 @@ class UniswapExchange(t1.Exchange):
     def get_auth(self) -> str | None:
         return self.uniswap.private_key
 
-    @override
+    #@override
     def get_supported_tickers(self) -> list[str]:
         return list(self.tickers.keys())
 
-    @override
+    #@override
     def get_exchange_rate(self, from_ticker: str, to_ticker: str) -> float:
         return self.uniswap.get_price_output(self.tickers[from_ticker][0], self.tickers[to_ticker][0], self.tickers[from_ticker][1])/self.tickers[to_ticker][1]
 
-    @override
+    #@override
     def get_fee(self, amount: float, from_wallet: t1.Wallet, to_wallet: t1.Wallet) -> float:
         return self.uniswap.get_fee_taker()
 
-    @override
+    #@override
     def trade(self, amount: float, from_wallet: t1.Wallet, to_wallet: t1.Wallet) -> dict | None:
         out = self.uniswap.make_trade(self.tickers[from_wallet.get_ticker()][0], self.tickers[to_wallet.get_ticker()][0], int(amount*self.tickers[from_wallet.get_ticker()][1]))
         return {"hexbytes": out}
@@ -56,7 +56,7 @@ class UniswapWallet(t1.Wallet):
         self.exchange: UniswapExchange = exchange
         super().__init__(ticker, self.exchange.get_address(), self.exchange.get_auth())
 
-    @override
+    #@override
     def get_live_balance(self) -> float | None:
         return self.exchange.get_balance(self.get_ticker())
 

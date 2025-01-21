@@ -5,7 +5,7 @@ from logging import getLogger, basicConfig
 from threading import Thread
 from time import sleep, time
 from random import randint
-from typing import final, override
+from typing import final#, override
 
 
 
@@ -238,7 +238,7 @@ class TraderOne(Trader):
         else:
             return None
 
-    @override
+    #@override
     def do_trade_cycle(self) -> None:
         main_wallet = self.get_main_wallet()
         if main_wallet is not None:
@@ -279,9 +279,9 @@ class TraderOne(Trader):
                                 if stage == 0:
                                     if trade_balance > 0:
                                         self.get_exchange().trade(trade_balance, from_wallet=wallet, to_wallet=main_wallet)
-                                    else:
-                                        if trade_balance < 0:
-                                            self.get_exchange().trade(abs(trade_balance), from_wallet=main_wallet, to_wallet=wallet)
+                                else:
+                                    if trade_balance < 0:
+                                        self.get_exchange().trade(abs(trade_balance), from_wallet=main_wallet, to_wallet=wallet)
 
 
 
@@ -326,11 +326,11 @@ class Tests():
                 super().__init__(ticker, addr, auth)
                 self.balance: float = start_balance
 
-            @override
+            #@override
             def get_live_balance(self) -> float | None:
                 return self.balance
 
-            @override
+            #@override
             def send_to(self, rec_addr: str, amount: float | None, meta: dict | None) -> dict | None:
                 if amount is not None:
                     newbalance = self.balance - amount
@@ -347,27 +347,29 @@ class Tests():
                 for n in range(num_tickers):
                     self.tickers[str(n)] = n
                 self.max_shuffle: int = max_shuffle
+                self.fee_factor = 0.05
 
-            @override
+            #@override
             def get_supported_tickers(self) -> list[str]:
                 return list(self.tickers.keys())
 
-            @override
+            #@override
             def get_exchange_rate(self, from_ticker: str, to_ticker: str) -> float:
                 return self.tickers[to_ticker]/self.tickers[from_ticker]
 
-            @override
+            #@override
             def trade(self, amount: float, from_wallet: Wallet, to_wallet: Wallet) -> dict | None:
                 transaction = from_wallet.send_to("", amount, None)
                 if transaction is not None and transaction.get(Transaction.TAG_COMPLETED, False):
-                    to_wallet.balance += amount*self.get_exchange_rate(from_wallet.get_ticker(), to_wallet.get_ticker())
+                    to_wallet.balance += (amount*self.get_exchange_rate(from_wallet.get_ticker(), to_wallet.get_ticker()))-self.get_fee(amount, from_wallet, to_wallet)
                 return super().trade(amount, from_wallet, to_wallet)
 
-            @override
+            #@override
             def get_fee(self, amount: float, from_wallet: Wallet, to_wallet: Wallet) -> float:
-                return self.get_exchange_rate(from_wallet.get_ticker(), to_wallet.get_ticker())*(randint(1, 10)/100)
+                return self.get_exchange_rate(from_wallet.get_ticker(), to_wallet.get_ticker())*self.fee_factor
 
             def shuffle_tickers(self):
+                self.fee_factor = randint(1, 10)/100
                 for ticker in self.tickers.keys():
                     n = randint(-(self.max_shuffle), self.max_shuffle)
                     #n = -0.001 # To validate that down-stopping works
