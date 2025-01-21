@@ -110,6 +110,9 @@ class Exchange():
         return []
 
     def get_exchange_rate(self, from_ticker: str, to_ticker: str) -> float:
+        """
+        Should return to/from, not the reciprocal.
+        """
         return 0
 
     def get_fee(self, amount: float, from_wallet: Wallet, to_wallet: Wallet) -> float:

@@ -41,15 +41,21 @@ class SolanaExchange(t1.Exchange):
 
     #@override
     def get_exchange_rate(self, from_ticker: str, to_ticker: str) -> float:
-        return f(lambda: self.agent.fetch_price(from_ticker)) / f(lambda: self.agent.fetch_price(to_ticker))
+        return f(lambda: self.agent.fetch_price(to_ticker)) / f(lambda: self.agent.fetch_price(from_ticker))
 
     #@override
     def get_fee(self, amount: float, from_wallet: t1.Wallet, to_wallet: t1.Wallet) -> float:
+        return self.get_exchange_rate(self.tickers[from_wallet.get_ticker()], self.tickers[to_wallet.get_ticker()])*amount*self.get_slippage_float()
+
+    def get_slippage(self) -> int:
         return self.slippage
+
+    def get_slippage_float(self) -> float:
+        return self.get_slippage()/100/100
 
     #@override
     def trade(self, amount: float, from_wallet: t1.Wallet, to_wallet: t1.Wallet) -> dict | None:
-        out = f(lambda: self.agent.trade(Pubkey.from_string(self.tickers[to_wallet.get_ticker()]), amount, Pubkey.from_string(self.tickers[self.from_wallet.get_ticker()]), slippage_bps=self.get_fee()))
+        out = f(lambda: self.agent.trade(Pubkey.from_string(self.tickers[to_wallet.get_ticker()]), amount, Pubkey.from_string(self.tickers[self.from_wallet.get_ticker()]), slippage_bps=self.get_slippage()))
         return {"hexbytes": out}
 
     def get_balance(self, ticker: str):
